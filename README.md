@@ -53,4 +53,4 @@ In the bottom you can see how many stages of the iteration were passed. One stag
 
 ## Versions
 
-See on [GitHub](https://github.com/DarkDream99/WorkConcentrator/) page
+See on [master branch](https://github.com/DarkDream99/WorkConcentrator/) page
