@@ -56,7 +56,6 @@ def reset_timer():
 
 # ---------------------------- TIMER MECHANISM ------------------------------- #
 
-
 @dataclass
 class WorkingState:
     name: str
@@ -66,15 +65,15 @@ class WorkingState:
 
     @classmethod
     def short_break(cls):
-        return cls('break', 'Short break', 3) # SHORT_BREAK_MIN * SECONDS_IN_MINUTE)
+        return cls('break', 'Short break', SHORT_BREAK_MIN * SECONDS_IN_MINUTE)
 
     @classmethod
     def long_break(cls):
-        return cls('long_break', 'Long break', 6) # LONG_BREAK_MIN * SECONDS_IN_MINUTE)
+        return cls('long_break', 'Long break', LONG_BREAK_MIN * SECONDS_IN_MINUTE)
 
     @classmethod
     def workin(cls):
-        return cls('work', 'Working', 6) # WORK_MIN * SECONDS_IN_MINUTE)
+        return cls('work', 'Working', WORK_MIN * SECONDS_IN_MINUTE)
 
     @staticmethod
     def connect_states(states: List['WorkingState']) -> 'WorkingState':
