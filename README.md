@@ -50,3 +50,7 @@ In the bottom you can see how many stages of the iteration were passed. One stag
 
 
 ## Versions
+
+- 0.1.0 - Initial version:
+    - Start looped iterations (25 5 25 5 25 5 25 20) mins
+    - Reset timer
