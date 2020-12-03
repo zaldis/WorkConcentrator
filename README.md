@@ -9,7 +9,7 @@ Tool that helps you to keep your concentration on the important work
 
 ## Installation
 
-1. Clone this repository;
+1. Clone this repository or install from [releases](https://github.com/DarkDream99/WorkConcentrator/releases);
 2. Select your python environment (via venv for example);
 3. Double check that you use `python3` (you can run: `which python` on Unix)
 ![Vesion example](./imgs/pyversion.png?raw=true)
