@@ -1,11 +1,10 @@
 import tkinter as tk
-import subprocess
 
 from dataclasses import dataclass
-from typing import Optional, List
-from os import path
+from typing import Optional
 
-# from pynotifier import Notification
+from pynotifier import NotificationClient, Notification
+from pynotifier.backends import platform
 
 
 # ---------------------------- CONSTANTS ------------------------------- #
@@ -22,39 +21,21 @@ SHORT_BREAK_MIN = 5
 LONG_BREAK_MIN = 20
 
 SECONDS_IN_MINUTE = 60
+MS_IN_SECOND = 1000
 
-timer = None
-# ---------------------------- TIMER RESET ------------------------------- #
+
+notify_client = NotificationClient()
+notify_client.register_backend(platform.Backend())
+
 
 def send_notification(text):
     print('Work Concentrator: ', text)
-    # cur_directory = path.dirname(__file__) 
-    # Notification(
-    #     title='Work Scheduler',
-    #     description=text,
-    #     # On Windows .ico is required, on Linux - .png
-    #     icon_path=path.join(cur_directory, 'media', 'icon.png'),
-    #     duration=5 * 60,
-    #     urgency=Notification.URGENCY_LOW
-    # ).send()
+    notification = Notification(
+        title='Work Scheduler',
+        message=text,
+    )
+    notify_client.notify_all(notification)
 
-
-def reset_timer():
-    global timer
-    global current_state
-
-    if not timer:
-        return
-
-    window.after_cancel(timer)
-    timer = None
-    current_state = None
-    title_label.config(text='Timer', fg=GREEN)
-    work_iterates_label.config(text='Nope')
-    canvas.itemconfig(timer_text, text='00:00')
-    send_notification('Working circle was stopped')
-
-# ---------------------------- TIMER MECHANISM ------------------------------- #
 
 @dataclass
 class WorkingState:
@@ -75,10 +56,14 @@ class WorkingState:
     def workin(cls):
         return cls('work', 'Working', WORK_MIN * SECONDS_IN_MINUTE)
 
-    @staticmethod
-    def connect_states(states: List['WorkingState']) -> 'WorkingState':
-        if not len(states):
-            return None
+
+class WorkingStateMachine:
+    def __init__(self, states: list[WorkingState]) -> None:
+        self._start_state = self._current_state = self._connect_states(states)
+        self.work_iteration_number = 0
+
+    def _connect_states(self, states: list[WorkingState]) -> WorkingState:
+        assert len(states), "Has to be at least one state"
         if len(states) == 1:
             return states[0]
 
@@ -89,71 +74,31 @@ class WorkingState:
         states[-1].next = states[0]
         return states[0]
 
+    def activate_state(self) -> WorkingState:
+        return_state = self._current_state
+        self._current_state = return_state.next
+        
+        if return_state.name == 'work':
+            self.work_iteration_number += 1
 
-start_state = WorkingState.connect_states([
-    WorkingState.workin(),
-    WorkingState.short_break(),
-    WorkingState.workin(),
-    WorkingState.short_break(),
-    WorkingState.workin(),
-    WorkingState.short_break(),
-    WorkingState.workin(),
-    WorkingState.short_break(),
-    WorkingState.long_break()
-])
+        if return_state.name == 'long_break':
+            self.work_iteration_number = 0
+
+        return return_state
+
+    def reset(self) -> WorkingState:
+        self._current_state = self._start_state
+        return self._current_state
 
 
-current_state = None
-passed_working_stages = 0
 title_color_mapping = {
     'break': PINK,
     'long_break': RED,
     'work': GREEN
 }
 
-def start_timer():
-    global current_state
-    global passed_working_stages
-    
-    if timer:
-        return
-
-    if not current_state:
-        current_state = start_state
-    else:
-        if current_state.name == 'work':
-            passed_working_stages += 1
-            stages_text = '+ ' * passed_working_stages
-            work_iterates_label.config(text=stages_text)
-
-        if current_state.name == 'long_break':
-            passed_working_stages = 0
-        current_state = current_state.next
-
-    send_notification(current_state.title)
-
-    title_label.config(
-        text=current_state.title,
-        fg=title_color_mapping[current_state.name]
-    )
-    count_down(current_state.time)
-
-# ---------------------------- COUNTDOWN MECHANISM ------------------------------- #
-
-def count_down(count):
-    minutes = count // 60
-    seconds = count % 60
-    canvas.itemconfig(timer_text, text=f'{minutes}:{seconds:02}')
-
-    global timer
-    if count > 0:
-        timer = window.after(1000, count_down, count-1)
-    else:
-        timer = None
-        start_timer()
 
 # ---------------------------- UI SETUP ------------------------------- #
-
 button_style = {
     'highlightthickness': 0,
     'pady': 10,
@@ -162,33 +107,111 @@ button_style = {
     'bg': DEFAULT
 }
 
-window = tk.Tk()
-window.title('Work scheduler')
-window.minsize(550, 300)
-window.config(padx=30, pady=40, bg=YELLOW)
+class UIBuilder():
+    def __init__(self, state_machine: WorkingStateMachine):
+        self.window = tk.Tk()
+        self.canvas: Optional[tk.Canvas] = None
+        self.timer_text: Optional[int] = None
+        self.title_label: Optional[tk.Label] = None
+        self.work_iterates_label: Optional[tk.Label] = None
 
-base_container = tk.Frame(window, bg=YELLOW)
-base_container.pack()
+        self.timer = None
+        self.state_machine = state_machine
 
-title_label = tk.Label(base_container, text='Timer', bg=YELLOW, fg=GREEN,
-                       font=(FONT_NAME, 30, 'bold'))
-title_label.grid(row=0, column=1)
+    def build(self) -> tk.Tk:
+        self.window.title('Work scheduler')
+        self.window.minsize(550, 300)
+        self.window.config(padx=30, pady=40, bg=YELLOW)
 
-canvas = tk.Canvas(base_container, width=200, height=100, bg=YELLOW, highlightthickness=0)
-timer_text = canvas.create_text(100, 50,
-                                text='00:00', font=(FONT_NAME, 35, 'bold'))
-canvas.grid(row=1, column=1)
+        base_container = tk.Frame(self.window, bg=YELLOW)
+        base_container.pack()
 
-start_button = tk.Button(base_container, text='Start', command=start_timer, **button_style)
-start_button.grid(row=2, column=0)
+        self.title_label = tk.Label(base_container, text='Timer', bg=YELLOW, fg=GREEN,
+                               font=(FONT_NAME, 30, 'bold'))
+        self.title_label.grid(row=0, column=1)
 
-end_button = tk.Button(base_container, text='Reset', command=reset_timer, **button_style)
-end_button.grid(row=2, column=2)
+        self.canvas = tk.Canvas(base_container, width=200, height=100, bg=YELLOW, highlightthickness=0)
+        self.timer_text = self.canvas.create_text(100, 50,
+                                        text='00:00', font=(FONT_NAME, 35, 'bold'))
+        self.canvas.grid(row=1, column=1)
 
-work_iterates_label = tk.Label(base_container, text='Nope', fg=RED, bg=YELLOW)
-work_iterates_label.grid(row=3, column=1)
+        start_button = tk.Button(base_container, text='Start', command=self._start_timer, **button_style)
+        start_button.grid(row=2, column=0)
 
-base_container.grid_columnconfigure(0, weight=1)
-base_container.grid_columnconfigure(3, weight=1)
+        end_button = tk.Button(base_container, text='Reset', command=self._reset_timer, **button_style)
+        end_button.grid(row=2, column=2)
 
-window.mainloop()
+        self.work_iterates_label = tk.Label(base_container, text='Nope', fg=RED, bg=YELLOW)
+        self.work_iterates_label.grid(row=3, column=1)
+
+        base_container.grid_columnconfigure(0, weight=1)
+        base_container.grid_columnconfigure(3, weight=1)
+
+        return self.window
+
+    def _reset_timer(self):
+        if not self.timer:
+            return
+
+        window.after_cancel(self.timer)
+        self.timer = None
+
+        self.state_machine.reset()
+
+        assert self.title_label
+        assert self.work_iterates_label
+        assert self.canvas
+        assert self.timer_text
+        self.title_label.config(text='Timer', fg=GREEN)
+        self.work_iterates_label.config(text='Nope')
+        self.canvas.itemconfig(self.timer_text, text='00:00')
+        send_notification('Working circle was stopped')
+
+    def _start_timer(self):
+        global state_machine
+        
+        if self.timer:
+            return
+
+        current_state = self.state_machine.activate_state() 
+        stages_text = '+ ' * state_machine.work_iteration_number
+        assert self.work_iterates_label
+        self.work_iterates_label.config(text=stages_text)
+
+        send_notification(current_state.title)
+
+        assert self.title_label
+        self.title_label.config(
+            text=current_state.title,
+            fg=title_color_mapping[current_state.name]
+        )
+        self._count_down(current_state.time)
+
+    def _count_down(self, count):
+        minutes = count // 60
+        seconds = count % 60
+        assert self.timer_text
+        assert self.canvas
+        self.canvas.itemconfig(self.timer_text, text=f'{minutes}:{seconds:02}')
+
+        if count > 0:
+            self.timer = window.after(MS_IN_SECOND, self._count_down, count-1)
+        else:
+            self.timer = None
+            self._start_timer()
+
+
+if __name__ == '__main__':
+    state_machine = WorkingStateMachine([
+        WorkingState.workin(),
+        WorkingState.short_break(),
+        WorkingState.workin(),
+        WorkingState.short_break(),
+        WorkingState.workin(),
+        WorkingState.short_break(),
+        WorkingState.workin(),
+        WorkingState.short_break(),
+        WorkingState.long_break()
+    ])
+    window = UIBuilder(state_machine).build()
+    window.mainloop()
