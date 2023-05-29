@@ -1,94 +1,27 @@
 import tkinter as tk
-
-from dataclasses import dataclass
 from typing import Optional
 
-from pynotifier import NotificationClient, Notification
-from pynotifier.backends import platform
+from src.state import WorkingStateMachine
+from src.settings import MS_IN_SECOND
+from src.notifier import WorkNotifier
 
 
-# ---------------------------- CONSTANTS ------------------------------- #
 PINK = "#e2979c"
 RED = "#e7305b"
 GREEN = "#9bdeac"
 YELLOW = "#f7f5dd"
-FONT_NAME = "Courier"
-
 DEFAULT = '#bedbbb'
 
-WORK_MIN = 25
-SHORT_BREAK_MIN = 5
-LONG_BREAK_MIN = 20
-
-SECONDS_IN_MINUTE = 60
-MS_IN_SECOND = 1000
+FONT_NAME = "Courier"
 
 
-notify_client = NotificationClient()
-notify_client.register_backend(platform.Backend())
-
-
-def send_notification(text):
-    print('Work Concentrator: ', text)
-    notification = Notification(
-        title='Work Scheduler',
-        message=text,
-    )
-    notify_client.notify_all(notification)
-
-
-@dataclass
-class WorkingState:
-    name: str
-    title: str
-    time: int
-    next: Optional['WorkingState'] = None
-
-    @classmethod
-    def short_break(cls):
-        return cls('break', 'Short break', SHORT_BREAK_MIN * SECONDS_IN_MINUTE)
-
-    @classmethod
-    def long_break(cls):
-        return cls('long_break', 'Long break', LONG_BREAK_MIN * SECONDS_IN_MINUTE)
-
-    @classmethod
-    def workin(cls):
-        return cls('work', 'Working', WORK_MIN * SECONDS_IN_MINUTE)
-
-
-class WorkingStateMachine:
-    def __init__(self, states: list[WorkingState]) -> None:
-        self._start_state = self._current_state = self._connect_states(states)
-        self.work_iteration_number = 0
-
-    def _connect_states(self, states: list[WorkingState]) -> WorkingState:
-        assert len(states), "Has to be at least one state"
-        if len(states) == 1:
-            return states[0]
-
-        for ind in range(len(states) - 1):
-            cur_state = states[ind]
-            next_state = states[ind+1]
-            cur_state.next = next_state
-        states[-1].next = states[0]
-        return states[0]
-
-    def activate_state(self) -> WorkingState:
-        return_state = self._current_state
-        self._current_state = return_state.next
-        
-        if return_state.name == 'work':
-            self.work_iteration_number += 1
-
-        if return_state.name == 'long_break':
-            self.work_iteration_number = 0
-
-        return return_state
-
-    def reset(self) -> WorkingState:
-        self._current_state = self._start_state
-        return self._current_state
+button_style = {
+    'highlightthickness': 0,
+    'pady': 10,
+    'padx': 20,
+    'font': (FONT_NAME, 14),
+    'bg': DEFAULT
+}
 
 
 title_color_mapping = {
@@ -97,15 +30,6 @@ title_color_mapping = {
     'work': GREEN
 }
 
-
-# ---------------------------- UI SETUP ------------------------------- #
-button_style = {
-    'highlightthickness': 0,
-    'pady': 10,
-    'padx': 20,
-    'font': (FONT_NAME, 14),
-    'bg': DEFAULT
-}
 
 class UIBuilder():
     def __init__(self, state_machine: WorkingStateMachine):
@@ -117,6 +41,7 @@ class UIBuilder():
 
         self.timer = None
         self.state_machine = state_machine
+        self.notifier = WorkNotifier()
 
     def build(self) -> tk.Tk:
         self.window.title('Work scheduler')
@@ -153,7 +78,7 @@ class UIBuilder():
         if not self.timer:
             return
 
-        window.after_cancel(self.timer)
+        self.window.after_cancel(self.timer)
         self.timer = None
 
         self.state_machine.reset()
@@ -165,7 +90,7 @@ class UIBuilder():
         self.title_label.config(text='Timer', fg=GREEN)
         self.work_iterates_label.config(text='Nope')
         self.canvas.itemconfig(self.timer_text, text='00:00')
-        send_notification('Working circle was stopped')
+        self.notifier.send('Working circle was stopped')
 
     def _start_timer(self):
         global state_machine
@@ -174,11 +99,11 @@ class UIBuilder():
             return
 
         current_state = self.state_machine.activate_state() 
-        stages_text = '+ ' * state_machine.work_iteration_number
+        stages_text = '+ ' * self.state_machine.work_iteration_number
         assert self.work_iterates_label
         self.work_iterates_label.config(text=stages_text)
 
-        send_notification(current_state.title)
+        self.notifier.send(current_state.title)
 
         assert self.title_label
         self.title_label.config(
@@ -195,23 +120,7 @@ class UIBuilder():
         self.canvas.itemconfig(self.timer_text, text=f'{minutes}:{seconds:02}')
 
         if count > 0:
-            self.timer = window.after(MS_IN_SECOND, self._count_down, count-1)
+            self.timer = self.window.after(MS_IN_SECOND, self._count_down, count-1)
         else:
             self.timer = None
             self._start_timer()
-
-
-if __name__ == '__main__':
-    state_machine = WorkingStateMachine([
-        WorkingState.workin(),
-        WorkingState.short_break(),
-        WorkingState.workin(),
-        WorkingState.short_break(),
-        WorkingState.workin(),
-        WorkingState.short_break(),
-        WorkingState.workin(),
-        WorkingState.short_break(),
-        WorkingState.long_break()
-    ])
-    window = UIBuilder(state_machine).build()
-    window.mainloop()
