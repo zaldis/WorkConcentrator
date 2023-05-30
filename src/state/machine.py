@@ -60,5 +60,6 @@ class WorkingStateMachine:
 
     def reset(self) -> WorkingState:
         self._current_state = self._start_state
+        self.work_iteration_number = 0
         return self._current_state
 
