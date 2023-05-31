@@ -5,6 +5,8 @@ from src.state import WorkingStateMachine
 from src.settings import MS_IN_SECOND
 from src.notifier import WorkNotifier
 
+from .utils import set_full_screen_app, set_minimize_screen_app
+
 
 PINK = "#e2979c"
 RED = "#e7305b"
@@ -93,12 +95,17 @@ class UIBuilder():
         self.notifier.send('Working circle was stopped')
 
     def _start_timer(self):
-        global state_machine
-        
         if self.timer:
             return
 
         current_state = self.state_machine.activate_state() 
+
+        is_break = (current_state.name in ['break', 'long_break'])
+        if is_break:
+            set_full_screen_app(self.window)
+        else:
+            set_minimize_screen_app(self.window)
+
         stages_text = '+ ' * self.state_machine.work_iteration_number
         assert self.work_iterates_label
         self.work_iterates_label.config(text=stages_text)
