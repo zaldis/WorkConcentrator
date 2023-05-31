@@ -14,7 +14,7 @@ Tool that helps you to keep your concentration on the important work
 1. Clone this repository;
 2. Select your python environment (via venv for example);
 3. Double check that you use `python3` (you can run: `which python` on Unix)
-4. Run: `python3 <path-to-work_concentrator.py>`
+4. Run: `python3 <path-to-main.py>`
 
 
 ### Additional:
